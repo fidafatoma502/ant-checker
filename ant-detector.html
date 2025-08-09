@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ant Detector — Video Alert</title>
+<style>
+  :root {
+    --primary: #f9a92f;
+    --primary-light: #ffc107;
+    --bg-dark: #07171f;
+    --bg-light: #102a3b;
+    --text-primary: #ffffff;
+    --text-secondary: #eaf2ffcc;
+    --alert: #ff5050;
+    --card-bg: rgba(35, 95, 170, 0.12);
+  }
+  
+  body {
+    font-family: 'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: radial-gradient(circle at top, var(--bg-light), var(--bg-dark));
+    color: var(--text-primary);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    min-height: 100vh;
+    margin: 0;
+    line-height: 1.5;
+  }
+  
+  .card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 28px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    max-width: 920px;
+    width: 100%;
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.08);
+    transition: all 0.3s ease;
+    overflow: hidden;
+    position: relative;
+  }
+  
+  .card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(249,169,47,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: -1;
+  }
+  
+  h1 {
+    font-size: 28px;
+    margin: 0 0 12px;
+    color: var(--primary-light);
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  h1::before {
+    content: '🐜';
+    font-size: 24px;
+  }
+  
+  p {
+    margin: 0 0 20px;
+    color: var(--text-secondary);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  
+  .controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  
+  label {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  input[type=range] {
+    width: 160px;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.1);
+    -webkit-appearance: none;
+  }
+  
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--primary);
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    transition: transform 0.2s ease;
+  }
+  
+  input[type=range]::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+  }
+  
+  button, input[type=file] {
+    padding: 10px 18px;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: #002540;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 8px rgba(249,169,47,0.3);
+  }
+  
+  button:hover:not(:disabled),
+  input[type=file]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(249,169,47,0.4);
+  }
+  
+  button:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  
+  button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+  
+  .viewer {
+    margin-top: 20px;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  
+  .visual {
+    position: relative;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    flex: 1;
+    min-width: 300px;
+    max-width: 640px;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  
+  .visual.alerting {
+    box-shadow: 0 0 30px rgba(255,80,80,0.7);
+    transform: scale(1.01);
+    animation: pulse 1.5s infinite alternate;
+  }
+  
+  @keyframes pulse {
+    0% { box-shadow: 0 0 20px rgba(255,80,80,0.7); }
+    100% { box-shadow: 0 0 40px rgba(255,80,80,0.9); }
+  }
+  
+  video, canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    object-fit: cover;
+    border-radius: 12px;
+  }
+  
+  .overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+  }
+  
+  .status {
+    width: 220px;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .stat {
+    background: rgba(255,255,255,0.08);
+    padding: 14px;
+    border-radius: 10px;
+    font-size: 15px;
+    min-height: 48px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    border-left: 3px solid rgba(255,255,255,0.1);
+  }
+  
+  .stat.alert {
+    background: rgba(204,58,58,0.25);
+    border-left: 3px solid var(--alert);
+    animation: statPulse 2s infinite;
+  }
+  
+  @keyframes statPulse {
+    0% { box-shadow: 0 4px 12px rgba(255,80,80,0.1); }
+    50% { box-shadow: 0 4px 20px rgba(255,80,80,0.3); }
+    100% { box-shadow: 0 4px 12px rgba(255,80,80,0.1); }
+  }
+  
+  .footer {
+    margin-top: 20px;
+    font-size: 13px;
+    color: #cfe6ffcc;
+    line-height: 1.5;
+    padding: 12px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 8px;
+  }
+  
+  .hint {
+    opacity: 0.85;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .hint::before {
+    content: '💡';
+  }
+  
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.05);
+    padding: 8px 12px;
+    border-radius: 10px;
+  }
+  
+  @media (max-width: 768px) {
+    .card {
+      padding: 20px;
+    }
+    
+    .controls {
+      gap: 8px;
+    }
+    
+    button, input[type=file] {
+      padding: 8px 14px;
+      font-size: 13px;
+    }
+    
+    input[type=range] {
+      width: 120px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Movement Detector</h1>
+  <p>Upload a recorded video or switch to webcam. When moving blobs are seen, you'll get a visual and sound alert.</p>
+
+  <div class="controls">
+    <input id="file" type="file" accept="video/*">
+    <button id="webcamBtn">📷 Webcam</button>
+    <button id="startBtn">▶ Start</button>
+    <button id="stopBtn" disabled>⏹ Stop</button>
+    <label class="hint" style="margin-left:auto">All processing happens in your browser</label>
+  </div>
+
+  <div class="controls">
+    <div class="control-group">
+      <label>Threshold:</label>
+      <input id="threshold" type="range" min="5" max="100" value="30">
+      <span id="thVal">30</span>
+    </div>
+    
+    <div class="control-group">
+      <label>Min size:</label>
+      <input id="minSize" type="range" min="2" max="600" value="30">
+      <span id="minVal">30px</span>
+    </div>
+    
+    <div class="control-group">
+      <label>FPS:</label>
+      <input id="fps" type="range" min="1" max="30" value="12">
+      <span id="fpsVal">12</span>
+    </div>
+  </div>
+
+  <div class="viewer">
+    <div class="visual" id="visual">
+      <video id="video" muted playsinline></video>
+      <canvas id="canvas" class="overlay"></canvas>
+    </div>
+    <div class="status">
+      <div class="stat" id="detectedCount">Detected: 0</div>
+      <div class="stat" id="message">Status: Idle</div>
+      <div class="stat" id="sensitivityInfo">Sensitivity: Medium</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="hint">Tips: Raise threshold to avoid false positives. Increase min size to ignore tiny specks. For more accuracy, integrate a trained model (e.g. TensorFlow.js).</span>
+  </div>
+</div>
+
+<script>
+/*
+ Ant Detector (client-side)
+ - Uses frame differencing (running average background) and blob detection (connected components)
+ - Plays a beep tone when any blob size >= minSize is detected
+ - No external libraries required
+*/
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const fileInput = document.getElementById('file');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const webcamBtn = document.getElementById('webcamBtn');
+
+const thresholdEl = document.getElementById('threshold');
+const minSizeEl = document.getElementById('minSize');
+const fpsEl = document.getElementById('fps');
+const thVal = document.getElementById('thVal');
+const minVal = document.getElementById('minVal');
+const fpsVal = document.getElementById('fpsVal');
+
+const detectedCountEl = document.getElementById('detectedCount');
+const messageEl = document.getElementById('message');
+const sensitivityInfo = document.getElementById('sensitivityInfo');
+const visual = document.getElementById('visual');
+
+let running = false;
+let playFromWebcam = false;
+let previousFrame = null;
+let runningAvg = null;
+let lastProcess = 0;
+let audioCtx = null;
+let oscillator = null;
+let gainNode = null;
+
+// update UI text
+thresholdEl.oninput = ()=> thVal.textContent = thresholdEl.value;
+minSizeEl.oninput = ()=> minVal.textContent = minSizeEl.value + 'px';
+fpsEl.oninput = ()=> fpsVal.textContent = fpsEl.value;
+
+// load file handler
+fileInput.addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  stopStream();
+  playFromWebcam = false;
+  const url = URL.createObjectURL(file);
+  video.src = url;
+  video.play().catch(()=>{});
+  messageEl.textContent = 'Status: Video loaded (paused) — click Start detection';
+});
+
+// webcam
+webcamBtn.addEventListener('click', async ()=>{
+  stopStream();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width:640, height:360 }, audio: false });
+    video.srcObject = stream;
+    playFromWebcam = true;
+    await video.play();
+    messageEl.textContent = 'Status: Webcam active — click Start detection';
+  } catch (err) {
+    alert('Could not access webcam: ' + err.message);
+  }
+});
+
+// start and stop
+startBtn.addEventListener('click', ()=>{
+  if(!video.src && !video.srcObject) { alert('Please choose a video file or enable webcam first.'); return; }
+  initAudio();
+  running = true;
+  startBtn.disabled = true;
+  stopBtn.disabled = false;
+  messageEl.textContent = 'Status: Detecting...';
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 360;
+  video.width = canvas.width;
+  video.height = canvas.height;
+  runningAvg = null;
+  previousFrame = null;
+  tick();
+});
+
+stopBtn.addEventListener('click', ()=>{
+  running = false;
+  startBtn.disabled = false;
+  stopBtn.disabled = true;
+  messageEl.textContent = 'Status: Stopped';
+  stopTone();
+});
+
+// clean up webcam stream (if any)
+function stopStream(){
+  if(video.srcObject){
+    const tracks = video.srcObject.getTracks();
+    tracks.forEach(t=>t.stop());
+    video.srcObject = null;
+  }
+  if(video.src){ video.pause(); video.removeAttribute('src'); }
+}
+
+// main loop
+async function tick(){
+  if(!running) return;
+  const now = performance.now();
+  const desiredInterval = 1000 / Math.max(1, parseInt(fpsEl.value,10));
+  if(now - lastProcess < desiredInterval){
+    requestAnimationFrame(tick); return;
+  }
+  lastProcess = now;
+
+  if(video.readyState < 2) {
+    requestAnimationFrame(tick); return;
+  }
+  // draw video frame to an offscreen canvas
+  const w = canvas.width, h = canvas.height;
+  // get frame
+  ctx.drawImage(video, 0, 0, w, h);
+  const frame = ctx.getImageData(0,0,w,h);
+  const gray = toGray(frame);
+
+  // init running average
+  if(!runningAvg){
+    runningAvg = new Float32Array(gray.length);
+    for(let i=0;i<gray.length;i++) runningAvg[i]=gray[i];
+    previousFrame = gray.slice();
+    requestAnimationFrame(tick);
+    return;
+  }
+
+  // update running average (simple exponential moving average)
+  const alpha = 0.12; // smaller = slower background update
+  for(let i=0;i<gray.length;i++){
+    runningAvg[i] = runningAvg[i] * (1-alpha) + gray[i] * alpha;
+  }
+
+  // compute absolute difference to runningAvg
+  const diff = new Uint8ClampedArray(gray.length);
+  for(let i=0;i<gray.length;i++){
+    const d = Math.abs(gray[i] - runningAvg[i]);
+    diff[i] = d;
+  }
+
+  // threshold
+  const th = parseInt(thresholdEl.value,10);
+  const mask = new Uint8ClampedArray(gray.length);
+  for(let i=0;i<diff.length;i++){
+    mask[i] = diff[i] > th ? 1 : 0;
+  }
+
+  // simple morphological: small 3x3 dilation then erosion to reduce noise
+  dilate(mask, w, h);
+  erode(mask, w, h);
+
+  // connected components (bounding boxes + area)
+  const comps = connectedComponents(mask, w, h, parseInt(minSizeEl.value,10));
+
+  // draw boxes and count
+  ctx.putImageData(frame,0,0); // redraw video to keep pixels intact
+  ctx.lineWidth = 2;
+  let detected = 0;
+  for(const c of comps){
+    // filter by size / aspect ratio optionally
+    if(c.area >= parseInt(minSizeEl.value,10) && c.area < (w*h*0.1)){
+      detected++;
+      ctx.strokeStyle = 'rgba(255,80,80,0.9)';
+      ctx.strokeRect(c.minX, c.minY, c.maxX - c.minX + 1, c.maxY - c.minY + 1);
+      ctx.fillStyle = 'rgba(255,80,80,0.2)';
+      ctx.fillRect(c.minX, c.minY, c.maxX - c.minX + 1, c.maxY - c.minY + 1);
+      ctx.font = '12px monospace';
+      ctx.fillStyle = '#fff';
+      ctx.fillText('ant?' + ' ' + c.area + 'px', c.minX + 2, Math.max(c.minY + 12, 12));
+    }
+  }
+
+  // UI updates & alerting
+  detectedCountEl.textContent = 'Detected: ' + detected;
+  if(detected > 0){
+    messageEl.textContent = 'Status: ALERT — movement(s) seen!';
+    messageEl.classList.add('alert');
+    visual.classList.add('alerting');
+    startTone();
+  } else {
+    messageEl.textContent = 'Status: Monitoring — no movement';
+    messageEl.classList.remove('alert');
+    visual.classList.remove('alerting');
+    stopTone();
+  }
+
+  requestAnimationFrame(tick);
+}
+
+// utility: convert ImageData to grayscale array
+function toGray(imageData){
+  const data = imageData.data;
+  const n = data.length/4;
+  const out = new Uint8ClampedArray(n);
+  for(let i=0,j=0;i<data.length;i+=4,j++){
+    // luminance approximation
+    out[j] = (0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2]) | 0;
+  }
+  return out;
+}
+
+// dilation 3x3 in-place (works on mask as 0/1)
+function dilate(mask, w, h){
+  const copy = mask.slice();
+  for(let y=1;y<h-1;y++){
+    for(let x=1;x<w-1;x++){
+      const i = y*w + x;
+      if(copy[i] === 1) continue;
+      if(copy[i-1] || copy[i+1] || copy[i-w] || copy[i+w] || copy[i-w-1] || copy[i-w+1] || copy[i+w-1] || copy[i+w+1]) mask[i]=1;
+    }
+  }
+}
+
+// erosion 3x3 in-place
+function erode(mask, w, h){
+  const copy = mask.slice();
+  for(let y=1;y<h-1;y++){
+    for(let x=1;x<w-1;x++){
+      const i = y*w + x;
+      if(copy[i] === 0) continue;
+      if(!copy[i-1] || !copy[i+1] || !copy[i-w] || !copy[i+w] || !copy[i-w-1] || !copy[i-w+1] || !copy[i+w-1] || !copy[i+w+1]) mask[i]=0;
+    }
+  }
+}
+
+// connected components using flood fill; returns array of {minX,minY,maxX,maxY,area}
+function connectedComponents(mask, w, h, minArea){
+  const seen = new Uint8Array(mask.length);
+  const comps = [];
+  const stack = [];
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const idx = y*w + x;
+      if(mask[idx] !== 1 || seen[idx]) continue;
+      // flood fill from idx
+      let minX=x, maxX=x, minY=y, maxY=y, area=0;
+      stack.length = 0;
+      stack.push(idx);
+      seen[idx] = 1;
+      while(stack.length){
+        const i = stack.pop();
+        const yy = Math.floor(i / w);
+        const xx = i % w;
+        area++;
+        if(xx < minX) minX = xx;
+        if(xx > maxX) maxX = xx;
+        if(yy < minY) minY = yy;
+        if(yy > maxY) maxY = yy;
+        // check 4 neighbours
+        const n1 = i - 1, n2 = i + 1, n3 = i - w, n4 = i + w;
+        if(xx > 0 && !seen[n1] && mask[n1]===1){ seen[n1]=1; stack.push(n1); }
+        if(xx < w-1 && !seen[n2] && mask[n2]===1){ seen[n2]=1; stack.push(n2); }
+        if(yy > 0 && !seen[n3] && mask[n3]===1){ seen[n3]=1; stack.push(n3); }
+        if(yy < h-1 && !seen[n4] && mask[n4]===1){ seen[n4]=1; stack.push(n4); }
+      }
+      if(area >= 1){
+        comps.push({minX,minY,maxX,maxY,area});
+      }
+    }
+  }
+  // optionally filter out very big ones (like camera movement), but keep that simple here
+  // sort by area descending
+  comps.sort((a,b)=>b.area-a.area);
+  return comps;
+}
+
+// simple audio tone (beep) using WebAudio
+function initAudio(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  gainNode = audioCtx.createGain();
+  gainNode.gain.value = 0;
+  gainNode.connect(audioCtx.destination);
+  oscillator = audioCtx.createOscillator();
+  oscillator.type = 'sine';
+  oscillator.frequency.value = 650; // higher pitch alert
+  oscillator.connect(gainNode);
+  oscillator.start();
+}
+
+let tonePlaying = false;
+let toneTimeout = null;
+function startTone(){
+  if(!audioCtx) initAudio();
+  // ramp up gain to avoid clicks
+  if(!tonePlaying){
+    gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + 0.02);
+    tonePlaying = true;
+  }
+  // keep tone on as long as detections keep coming; we'll stop after a short idle
+  if(toneTimeout) clearTimeout(toneTimeout);
+  toneTimeout = setTimeout(()=>{ stopTone(); }, 800); // stop after 800ms without new detections
+}
+
+function stopTone(){
+  if(!tonePlaying || !gainNode) return;
+  gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+  gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
+  gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.08);
+  tonePlaying = false;
+  if(toneTimeout){ clearTimeout(toneTimeout); toneTimeout = null; }
+}
+
+// cleanup if page closed
+window.addEventListener('beforeunload', ()=>{
+  stopStream();
+  if(oscillator) oscillator.stop();
+  if(audioCtx) audioCtx.close();
+});
+</script>
+</body>
+</html>
